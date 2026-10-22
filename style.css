@@ -930,6 +930,17 @@ body::before {
   pointer-events: none;
   user-select: none;
 }
+.sch-res-measure rect {
+  fill: rgba(7,16,13,.94);
+  stroke: var(--mint-dim);
+  stroke-width: 1;
+}
+.sch-res-measure text {
+  fill: var(--mint);
+  font: 9px var(--mono);
+  pointer-events: none;
+  user-select: none;
+}
 .sch-symbol { fill: none; stroke: #c9ded4; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .sch-comp.selected .sch-symbol { stroke: var(--mint); }
 .sch-comp text { fill: #88a49a; font: 10px var(--mono); user-select: none; }
