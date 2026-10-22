@@ -8,6 +8,7 @@ VOLT 把自然语言里的电子技术参数解析出来，用明确的电路公
 
 - 计算器和 MNA 电路求解器由 Pyodide 在浏览器内运行，不需要后端
 - 电路画布：元件、导线、节点、电压源正负极、导线电流箭头/标注
+- 导线支路计算：填写 I / U / R，按 `R=U/I` 或 `U=I×R` 求第三个
 - 免费 AI 助教（Pollinations），AI 只解释思路，数值以确定性计算为准
 - 纯静态站点，可直接部署到 GitHub Pages
 
@@ -19,11 +20,9 @@ VOLT 把自然语言里的电子技术参数解析出来，用明确的电路公
 
 ## 本地完整版
 
-完整版包含 Windows OCR、本地 Flask/标准库服务和同一套计算器：
+完整版包含 Windows OCR、本地 HTTP 服务和同一套计算器：
 
 ```powershell
 pip install -r requirements.txt
 python server.py --port 8765 --open
 ```
-
-更多文档见 `STATIC.md`。
