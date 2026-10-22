@@ -94,7 +94,7 @@
   const fieldLabel = $("#schFieldLabel");
   const branchCalc = $("#schBranchCalc");
   const voltageInput = $("#schVoltage");
-  const resistanceInput = $("#schResistance");
+  const currentInput = $("#schCurrent");
   const calcResult = $("#schCalcResult");
 
   function uid(prefix) {
@@ -189,6 +189,23 @@
       return `<circle class="pin" data-cid="${c.id}" data-pin="${pin}" cx="${x}" cy="${y}" r="4.5"/>`;
     }).join("");
     const isGnd = c.type === "GND";
+    let valueText = c.value || "";
+    let measure = "";
+    if (c.type === "R") {
+      const rv = parseEng(c.value);
+      valueText = Number.isFinite(rv) ? `R = ${fmtOhm(rv)}` : (c.value ? `R = ${c.value}` : "R = ?");
+      const u = parseEng(c.voltage);
+      const i = parseEng(c.current);
+      if (Number.isFinite(u) || Number.isFinite(i)) {
+        const lines = [];
+        if (Number.isFinite(u)) lines.push(`U ${fmtUnit(u, "V")}`);
+        if (Number.isFinite(i)) lines.push(`I ${fmtA(i)}`);
+        measure = `<g class="sch-res-measure" transform="translate(${c.x + 62} ${c.y - 26})">
+          <rect x="0" y="0" width="118" height="42" rx="6"/>
+          ${lines.map((line, idx) => `<text x="8" y="${15 + idx * 15}">${esc(line)}</text>`).join("")}
+        </g>`;
+      }
+    }
     let signs = "";
     if (c.type === "V") {
       const pp = c.flip ? pinPos(c, "2") : pinPos(c, "1");
@@ -212,7 +229,8 @@
         ${pins}
       </g>
       <text x="${c.x}" y="${c.y - 54}" text-anchor="middle">${esc(c.label)}</text>
-      ${isGnd ? "" : `<text x="${c.x}" y="${c.y + 66}" text-anchor="middle" fill="#7a8e84">${esc(c.value)}</text>`}
+      ${isGnd ? "" : `<text x="${c.x}" y="${c.y + 66}" text-anchor="middle" fill="#7a8e84">${esc(valueText)}</text>`}
+      ${measure}
       ${signs}
     </g>`;
   }
@@ -248,77 +266,83 @@
     return `${Number((v * 1e9).toPrecision(3))} n${unit}`;
   }
   function fmtA(v) { return fmtUnit(v, "A"); }
+  function fmtOhm(r) {
+    if (!Number.isFinite(r)) return "?";
+    if (Math.abs(r) >= 1e6) return `${Number((r / 1e6).toPrecision(3))} MΩ`;
+    if (Math.abs(r) >= 1e3) return `${Number((r / 1e3).toPrecision(3))} kΩ`;
+    return `${Number(r.toPrecision(3))} Ω`;
+  }
+  function engR(r) {
+    if (!Number.isFinite(r)) return "";
+    if (Math.abs(r) >= 1e6) return `${Number((r / 1e6).toPrecision(6))}M`;
+    if (Math.abs(r) >= 1e3) return `${Number((r / 1e3).toPrecision(6))}k`;
+    return `${Number(r.toPrecision(6))}`;
+  }
   function parseEng(text) {
     const m = String(text ?? "").trim().match(/^([+-]?\d+(?:\.\d+)?)\s*([pnuµmkKMGT]?)/);
     if (!m) return NaN;
     return parseFloat(m[1]) * ({ p: 1e-12, n: 1e-9, u: 1e-6, "µ": 1e-6, m: 1e-3, "": 1, k: 1e3, K: 1e3, M: 1e6, G: 1e9, T: 1e12 }[m[2]] ?? 1);
   }
-  function attachedManual(cid) {
-    for (const w of state.wires) {
-      if (w.manualCurrent === null || w.manualCurrent === undefined) continue;
-      if (!Number.isFinite(Number(w.manualCurrent))) continue;
-      if ((w.a.k === "pin" && w.a.cid === cid) || (w.b.k === "pin" && w.b.cid === cid)) {
-        return Number(w.manualCurrent);
-      }
-    }
-    return null;
+  function selectedResistor() {
+    if (state.selected?.kind !== "comp") return null;
+    const c = state.comps.find((x) => x.id === state.selected.id);
+    return c?.type === "R" ? c : null;
   }
 
-  function attachedResistor(w) {
-    for (const a of [w.a, w.b]) {
-      if (a.k !== "pin") continue;
-      const c = state.comps.find((x) => x.id === a.cid);
-      if (c?.type === "R") {
-        const r = parseEng(c.value);
-        if (Number.isFinite(r)) return r;
-      }
-    }
-    return null;
+  function resistorSolution(c) {
+    return (state.lastSolve?.components || []).find((x) => x.name === c.label) || null;
   }
 
-  function wireBranchCurrent(w) {
-    const cur = Number(wireCurrent(w));
-    return Number.isFinite(cur) ? cur : null;
-  }
+  function calcOhm(kind) {
+    const c = selectedResistor();
+    if (!c) return;
+    const sol = resistorSolution(c);
+    let u = parseEng(voltageInput.value);
+    let i = parseEng(currentInput.value);
+    let r = parseEng(c.value);
+    if (!Number.isFinite(u) && sol) u = parseEng(sol.voltage);
+    if (!Number.isFinite(i) && sol) i = Number(sol.current_raw);
+    const show = (text, err = false) => {
+      calcResult.className = "sch-calc-result" + (err ? " err" : "");
+      calcResult.textContent = text;
+    };
 
-  function calcBranch(kind) {
-    const w = state.wires.find((x) => x.id === state.selected?.id);
-    if (!w) return;
-    const cur = wireBranchCurrent(w);
-    if (cur === null || Math.abs(cur) < 1e-15) {
-      calcResult.className = "sch-calc-result err";
-      calcResult.textContent = "没有可用电流。请在“电流标注”里填写 I，或先求解。";
-      return;
-    }
     if (kind === "R") {
-      const u = parseEng(voltageInput.value);
-      if (!Number.isFinite(u) || u === 0) {
-        calcResult.className = "sch-calc-result err";
-        calcResult.textContent = "请先填写导线电压 U，且不能为 0。";
+      if (!Number.isFinite(u) || !Number.isFinite(i) || i === 0) {
+        show("需要 U 和 I，且 I 不能为 0。", true);
         return;
       }
-      const r = Math.abs(u / cur);
-      w.resistance = r;
-      resistanceInput.value = fmtUnit(r, "Ω");
-      calcResult.className = "sch-calc-result";
-      calcResult.textContent = `R = U / I = ${fmtUnit(Math.abs(u), "V")} / ${fmtA(Math.abs(cur))} = ${fmtUnit(r, "Ω")}`;
+      r = Math.abs(u / i);
+      c.value = engR(r);
+      c.voltage = fmtUnit(Math.abs(u), "V");
+      c.current = fmtA(Math.abs(i));
+      render();
+      show(`R = U / I = ${fmtUnit(Math.abs(u), "V")} / ${fmtA(Math.abs(i))} = ${fmtOhm(r)}`);
       return;
     }
-    let r = parseEng(resistanceInput.value);
-    if (!Number.isFinite(r) || r <= 0) {
-      const auto = attachedResistor(w);
-      if (auto !== null) r = auto;
-    }
-    if (!Number.isFinite(r) || r <= 0) {
-      calcResult.className = "sch-calc-result err";
-      calcResult.textContent = "请先填写电阻 R，或让这条导线直接连一个电阻。";
+
+    if (kind === "U") {
+      if (!Number.isFinite(i) || !Number.isFinite(r) || r <= 0) {
+        show("需要 I 和 R，且 R 不能为 0。", true);
+        return;
+      }
+      u = Math.abs(i) * r;
+      c.voltage = fmtUnit(u, "V");
+      c.current = fmtA(Math.abs(i));
+      render();
+      show(`U = I × R = ${fmtA(Math.abs(i))} × ${fmtOhm(r)} = ${fmtUnit(u, "V")}`);
       return;
     }
-    const u = Math.abs(cur) * r;
-    w.voltage = u;
-    voltageInput.value = fmtUnit(u, "V");
-    calcResult.className = "sch-calc-result";
-    calcResult.textContent = `U = I × R = ${fmtA(Math.abs(cur))} × ${fmtUnit(r, "Ω")} = ${fmtUnit(u, "V")}`;
+
+    if (!Number.isFinite(u) || !Number.isFinite(r) || r <= 0) {
+      show("需要 U 和 R，且 R 不能为 0。", true);
+      return;
+    }
+    i = Math.abs(u / r);
+    c.current = fmtA(i);
+    c.voltage = fmtUnit(Math.abs(u), "V");
+    render();
+    show(`I = U / R = ${fmtUnit(Math.abs(u), "V")} / ${fmtOhm(r)} = ${fmtA(i)}`);
   }
   function wireCurrent(w) {
     if (w.manualCurrent !== undefined && w.manualCurrent !== null) return w.manualCurrent;
@@ -436,20 +460,14 @@
       } else if (!["R", "V", "I", "C", "L", "F", "SW", "GND"].includes(c.type)) {
         measured.textContent = "该元件目前仅绘图，不参与直流求解。";
       }
-      const mI = attachedManual(c.id);
-      if (mI !== null && Number.isFinite(mI)) {
-        const av = Math.abs(mI);
-        if (c.type === "R") {
-          const rv = parseEng(c.value);
-          if (Number.isFinite(rv)) {
-            measured.innerHTML += `<br><b>按导线标注电流</b> I=${fmtA(av)} → V=${fmtUnit(av * rv, "V")} · P=${fmtUnit(av * av * rv, "W")}`;
-          }
-        } else if (c.type === "V") {
-          const vv = parseEng(c.value);
-          if (Number.isFinite(vv)) {
-            measured.innerHTML += `<br><b>按导线标注电流</b> I=${fmtA(av)} → P=${fmtUnit(Math.abs(vv) * av, "W")}`;
-          }
-        }
+      if (c.type === "R") {
+        fieldLabel.textContent = "电阻 R (Ω)";
+        val.placeholder = "未知可留空，用 U/I 求";
+        branchCalc.classList.add("show");
+        voltageInput.value = c.voltage ?? sol?.voltage ?? "";
+        currentInput.value = c.current ?? (sol ? fmtA(sol.current_raw) : "");
+        calcResult.className = "sch-calc-result";
+        calcResult.textContent = "填 U 和 I 求 R；填 I 和 R 求 U；填 U 和 R 求 I。";
       }
     } else if (sel.kind === "wire") {
       const w = state.wires.find((x) => x.id === sel.id);
@@ -475,13 +493,6 @@
         }
       }
       measured.innerHTML = m;
-      branchCalc.classList.add("show");
-      voltageInput.value = w.voltage ?? "";
-      resistanceInput.value = w.resistance ?? "";
-      calcResult.className = "sch-calc-result";
-      calcResult.textContent = cur === null || cur === undefined
-        ? "先填写导线电流 I，或点求解得到电流；再填 U 或 R。"
-        : `可用电流 I = ${fmtA(Number(cur))}。填 U 或 R 后点计算。`;
     } else {
       selText.textContent = "节点 / 连接点";
       val.value = "";
@@ -1000,17 +1011,30 @@
   });
 
   voltageInput?.addEventListener("input", (e) => {
-    if (state.selected?.kind !== "wire") return;
-    const w = state.wires.find((x) => x.id === state.selected.id);
-    if (w) w.voltage = e.target.value;
+    const c = selectedResistor();
+    if (c) c.voltage = e.target.value;
   });
-  resistanceInput?.addEventListener("input", (e) => {
-    if (state.selected?.kind !== "wire") return;
-    const w = state.wires.find((x) => x.id === state.selected.id);
-    if (w) w.resistance = e.target.value;
+  currentInput?.addEventListener("input", (e) => {
+    const c = selectedResistor();
+    if (c) c.current = e.target.value;
   });
-  $("#schCalcR")?.addEventListener("click", () => calcBranch("R"));
-  $("#schCalcV")?.addEventListener("click", () => calcBranch("V"));
+  $("#schCalcR")?.addEventListener("click", () => calcOhm("R"));
+  $("#schCalcV")?.addEventListener("click", () => calcOhm("U"));
+  $("#schCalcI")?.addEventListener("click", () => calcOhm("I"));
+  $("#schAskAI")?.addEventListener("click", () => {
+    const c = selectedResistor();
+    if (!c) return;
+    const u = parseEng(voltageInput.value);
+    const i = parseEng(currentInput.value);
+    const r = parseEng(c.value);
+    const known = [];
+    if (Number.isFinite(u)) known.push(`电压 U=${fmtUnit(u, "V")}`);
+    if (Number.isFinite(i)) known.push(`电流 I=${fmtA(i)}`);
+    if (Number.isFinite(r)) known.push(`电阻 R=${fmtOhm(r)}`);
+    const q = `电阻 ${c.label}：${known.join("，") || "已知部分参数"}。请用欧姆定律解释它的电压、电流、电阻关系，并说明计算过程。`;
+    editor.classList.remove("show");
+    if (typeof window.askAI === "function") window.askAI(q, known.join("；"));
+  });
 
   flipBtn?.addEventListener("click", () => {
     if (state.selected?.kind === "comp") {
