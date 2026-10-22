@@ -142,7 +142,7 @@
           <button class="sch-tool" data-sch-tool="node" type="button">节点</button>
           <button class="sch-tool" id="schCurrentToggle" type="button">电流数值</button>
         </div>
-        <div class="sch-canvas-hint">拖动元件移动 · 滚轮缩放 · 中键拖动画布 · Delete 删除 · R 旋转 · 选中导线可标注电流</div>
+        <div class="sch-canvas-hint">拖动元件移动 · 滚轮缩放 · 中键拖动画布 · Delete 删除 · R 旋转 · 未知 R/U + 已知导线电流可反求</div>
       </main>
       <aside class="sch-inspector">
         <div class="sch-panel-label">选中对象</div>
@@ -152,6 +152,7 @@
           <input id="schValue" type="text" placeholder="例如 10k / 5V / 100nF">
         </label>
         <div class="sch-inspector-actions">
+          <button id="schVar" class="followup" type="button">设为未知</button>
           <button id="schFlip" class="followup" type="button">正负极反转</button>
           <button id="schRotate" class="followup" type="button">旋转</button>
           <button id="schDelete" class="followup" type="button">删除</button>
