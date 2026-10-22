@@ -90,6 +90,7 @@
   const overlay = $("#schOverlay");
   const editor = $("#schematicEditor");
   const flipBtn = $("#schFlip");
+  const varBtn = $("#schVar");
   const measured = $("#schMeasured");
   const fieldLabel = $("#schFieldLabel");
   const branchCalc = $("#schBranchCalc");
@@ -149,6 +150,7 @@
       x: snap(x), y: snap(y), rot: (rot + 360) % 360,
       value: value ?? DEFAULT_VALUE[type] ?? "",
       flip: false,
+      unknown: false,
     };
     state.comps.push(c);
     return c;
@@ -162,7 +164,7 @@
   function addWire(a, b) {
     if (anchorKey(a) === anchorKey(b)) return null;
     invalidate();
-    const w = { id: uid("w"), a, b, manualCurrent: null, computedCurrent: null };
+    const w = { id: uid("w"), a, b, manualCurrent: null, computedCurrent: null, known: false };
     state.wires.push(w);
     return w;
   }
@@ -193,10 +195,10 @@
     let measure = "";
     if (c.type === "R") {
       const rv = parseEng(c.value);
-      valueText = Number.isFinite(rv) ? `R = ${fmtOhm(rv)}` : (c.value ? `R = ${c.value}` : "R = ?");
+      valueText = c.unknown ? "R = ?" : (Number.isFinite(rv) ? `R = ${fmtOhm(rv)}` : (c.value ? `R = ${c.value}` : "R = ?"));
       const u = parseEng(c.voltage);
       const i = parseEng(c.current);
-      if (Number.isFinite(u) || Number.isFinite(i)) {
+      if (!c.unknown && (Number.isFinite(u) || Number.isFinite(i))) {
         const lines = [];
         if (Number.isFinite(u)) lines.push(`U ${fmtUnit(u, "V")}`);
         if (Number.isFinite(i)) lines.push(`I ${fmtA(i)}`);
@@ -205,6 +207,8 @@
           ${lines.map((line, idx) => `<text x="8" y="${15 + idx * 15}">${esc(line)}</text>`).join("")}
         </g>`;
       }
+    } else if (c.type === "V" && c.unknown) {
+      valueText = "U = ?";
     }
     let signs = "";
     if (c.type === "V") {
@@ -352,6 +356,7 @@
     const a = anchorPos(w.a), b = anchorPos(w.b);
     const d = wirePath(a, b);
     const sel = state.selected?.kind === "wire" && state.selected.id === w.id ? "selected" : "";
+    const knownCls = w.known ? "known" : "";
     let annot = "";
     const cur = wireCurrent(w);
     const annotate = state.showCurrents || (state.selected?.kind === "wire" && state.selected.id === w.id);
@@ -374,7 +379,7 @@
         annot += `<text class="sch-wire-value" x="${mx + nx}" y="${my + ny + 3}" text-anchor="middle">${esc(fmtA(v))}</text>`;
       }
     }
-    return `<g><path class="sch-wire ${sel}" d="${d}"/><path class="sch-wire-hit" data-wid="${w.id}" d="${d}"/>${annot}</g>`;
+    return `<g><path class="sch-wire ${sel} ${knownCls}" d="${d}"/><path class="sch-wire-hit" data-wid="${w.id}" d="${d}"/>${annot}</g>`;
   }
 
   function render() {
@@ -434,6 +439,7 @@
     fieldLabel.textContent = "数值";
     val.placeholder = "例如 10k / 5V / 100nF";
     flipBtn.style.display = "none";
+    varBtn.style.display = "none";
     measured.innerHTML = "";
     branchCalc.classList.remove("show");
     if (!sel) {
@@ -454,13 +460,25 @@
         flipBtn.style.display = "";
         flipBtn.textContent = c.flip ? "正负极已反转" : "正负极反转";
       }
+      if (c.type === "R" || c.type === "V") {
+        varBtn.style.display = "";
+        varBtn.textContent = c.unknown ? "取消未知" : (c.type === "R" ? "设为未知 R" : "设为未知 U");
+        if (c.unknown) {
+          val.disabled = true;
+          val.value = "";
+          fieldLabel.textContent = c.type === "R" ? "电阻 R (Ω) = ?" : "电压 U (V) = ?";
+          val.placeholder = "未知量，由已知导线电流反求";
+        }
+      }
       const sol = (state.lastSolve?.components || []).find((x) => x.name === c.label);
-      if (sol) {
+      if (sol && !c.unknown) {
         measured.innerHTML = `<b>${esc(c.label)}</b> 电压 ${esc(sol.voltage)} · 电流 ${esc(sol.current)} · 功率 ${esc(sol.power)}`;
+      } else if (c.unknown) {
+        measured.textContent = "未知量：在一条导线上填写已知电流，再点“求解”反求。";
       } else if (!["R", "V", "I", "C", "L", "F", "SW", "GND"].includes(c.type)) {
         measured.textContent = "该元件目前仅绘图，不参与直流求解。";
       }
-      if (c.type === "R") {
+      if (c.type === "R" && !c.unknown) {
         fieldLabel.textContent = "电阻 R (Ω)";
         val.placeholder = "未知可留空，用 U/I 求";
         branchCalc.classList.add("show");
@@ -474,13 +492,15 @@
       if (!w) { state.selected = null; return updateInspector(); }
       selText.textContent = `导线 ${anchorLabel(w.a)} → ${anchorLabel(w.b)}`;
       val.disabled = false;
-      fieldLabel.textContent = "电流标注 (A)";
-      val.placeholder = "例如 1A 或 -0.5A";
+      fieldLabel.textContent = w.known ? "已知导线电流 I (A)" : "导线电流 I (A)";
+      val.placeholder = "例如 1A 或 20mA";
       val.value = w.manualCurrent ?? "";
       rotate.disabled = true;
       del.disabled = false;
       flipBtn.style.display = "";
       flipBtn.textContent = "方向反转";
+      varBtn.style.display = "";
+      varBtn.textContent = w.known ? "取消已知电流" : "作为已知电流";
       const cur = w.computedCurrent;
       let m = cur === null || cur === undefined
         ? "求解后会显示计算电流。"
@@ -556,6 +576,10 @@
     const supported = new Set(["R", "V", "I"]);
     for (const c of state.comps) {
       if (!supported.has(c.type)) continue;
+      if (c.unknown) {
+        warnings.push(`${c.label} 是未知量，点“求解”反推`);
+        continue;
+      }
       let p1 = "1", p2 = "2";
       if (c.type === "V") {
         p1 = c.flip ? "2" : "1";
@@ -814,8 +838,127 @@
     if (doRender) render();
   }
 
+  async function solveNetlistRaw(netlist) {
+    if (window.VOLT_STATIC && window.voltSolveCircuit) {
+      return window.voltSolveCircuit(netlist);
+    }
+    const res = await fetch("/api/circuit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ netlist }),
+    });
+    return res.json();
+  }
+
+  function targetComponent(w, includeUnknown = false) {
+    for (const a of [w.a, w.b]) {
+      if (a.k !== "pin") continue;
+      const c = state.comps.find((x) => x.id === a.cid);
+      if (c && ["R", "V", "I"].includes(c.type) && (includeUnknown || !c.unknown)) return c;
+    }
+    return null;
+  }
+
+  function applySolution(data) {
+    const out = $("#schResult");
+    state.lastSolve = data;
+    state.wireWarnings = computeWireCurrents(data);
+    render();
+    const nodes = Object.entries(data.nodes).filter(([k]) => k !== "0")
+      .map(([k, v]) => `${k.padEnd(4)} ${v.display}`).join("\n");
+    const comps = data.components.map((c) =>
+      `${c.name.padEnd(4)} ${c.kind}  ${c.from}→${c.to}  ${c.current}  ${c.power}`
+    ).join("\n");
+    out.className = "sch-result ok";
+    out.textContent = `节点电压\n${nodes}\n\n支路\n${comps}\n\n功率\n电源 ${data.total_source_power} / 电阻 ${data.total_resistor_power} / 差 ${data.balance}`
+      + (state.wireWarnings.length ? `\n\n提示\n${state.wireWarnings.join("\n")}` : "");
+  }
+
+  async function solveUnknown(unknown) {
+    const out = $("#schResult");
+    const knownWires = state.wires.filter((w) =>
+      w.known && w.manualCurrent !== null && w.manualCurrent !== undefined &&
+      Number.isFinite(Number(w.manualCurrent)) && Math.abs(Number(w.manualCurrent)) > 1e-12
+    );
+    if (!knownWires.length) {
+      out.className = "sch-result err";
+      out.textContent = "有未知量，但没有已知电流约束。请选中一条导线，填电流并点“作为已知电流”。";
+      return;
+    }
+    const targetWire = knownWires[0];
+    const target = targetComponent(targetWire, true);
+    if (!target) {
+      out.className = "sch-result err";
+      out.textContent = "已知电流所在导线没有直接连接可测量的元件。请把约束放在电阻/电源支路的导线上。";
+      return;
+    }
+    const targetValue = Math.abs(Number(targetWire.manualCurrent));
+    out.className = "sch-result";
+    out.textContent = `正在反推 ${unknown.label}…`;
+    const original = unknown.value;
+    const trial = async (value) => {
+      unknown.unknown = false;
+      unknown.value = value;
+      const { netlist, error } = buildNetlist();
+      if (error) {
+        unknown.unknown = true;
+        unknown.value = original;
+        return null;
+      }
+      const data = await solveNetlistRaw(netlist);
+      unknown.unknown = true;
+      unknown.value = original;
+      if (!data.ok) return null;
+      const sol = (data.components || []).find((x) => x.name === target.label);
+      return sol ? Math.abs(sol.current_raw) : null;
+    };
+
+    try {
+      if (unknown.type === "R") {
+        let lo = 0.1, hi = 1e8;
+        const iLo = await trial(engR(lo));
+        const iHi = await trial(engR(hi));
+        if (iLo === null || iHi === null) throw new Error("试算失败，请检查电路连接");
+        if (targetValue < Math.min(iLo, iHi) || targetValue > Math.max(iLo, iHi)) {
+          throw new Error(`目标电流 ${fmtA(targetValue)} 超出可调范围（${fmtA(iLo)} ~ ${fmtA(iHi)}）`);
+        }
+        for (let k = 0; k < 36; k++) {
+          const mid = Math.sqrt(lo * hi);
+          const im = await trial(engR(mid));
+          if (im === null) throw new Error("试算失败");
+          if (im > targetValue) lo = mid; else hi = mid;
+        }
+        unknown.value = engR(Math.sqrt(lo * hi));
+      } else if (unknown.type === "V") {
+        const i0 = await trial("0");
+        const i1 = await trial("1");
+        if (i0 === null || i1 === null || Math.abs(i1 - i0) < 1e-15) {
+          throw new Error("电压源变化对目标电流没有可测影响");
+        }
+        const v = (targetValue - i0) / (i1 - i0);
+        unknown.value = `${Number(v.toPrecision(8))}V`;
+      } else {
+        throw new Error("目前只支持未知电阻 R 或未知电压源 U");
+      }
+      unknown.unknown = false;
+      invalidate();
+      await solve();
+    } catch (err) {
+      unknown.unknown = true;
+      unknown.value = original;
+      out.className = "sch-result err";
+      out.textContent = String(err?.message || err);
+      render();
+    }
+  }
+
   async function solve() {
-    const { netlist, warnings, error } = updateNetlistPreview();
+    const unknown = state.comps.find((c) => c.unknown);
+    if (unknown) {
+      await solveUnknown(unknown);
+      return;
+    }
+    const { netlist, error } = updateNetlistPreview();
     const out = $("#schResult");
     if (error) {
       out.className = "sch-result err";
@@ -825,33 +968,13 @@
     out.className = "sch-result";
     out.textContent = "求解中…";
     try {
-      let data;
-      if (window.VOLT_STATIC && window.voltSolveCircuit) {
-        data = await window.voltSolveCircuit(netlist);
-      } else {
-        const res = await fetch("/api/circuit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ netlist }),
-        });
-        data = await res.json();
-      }
+      const data = await solveNetlistRaw(netlist);
       if (!data.ok) {
         out.className = "sch-result err";
         out.textContent = data.error || "求解失败";
         return;
       }
-      state.lastSolve = data;
-      state.wireWarnings = computeWireCurrents(data);
-      render();
-      const nodes = Object.entries(data.nodes).filter(([k]) => k !== "0")
-        .map(([k, v]) => `${k.padEnd(4)} ${v.display}`).join("\n");
-      const comps = data.components.map((c) =>
-        `${c.name.padEnd(4)} ${c.kind}  ${c.from}→${c.to}  ${c.current}  ${c.power}`
-      ).join("\n");
-      out.className = "sch-result ok";
-      out.textContent = `节点电压\n${nodes}\n\n支路\n${comps}\n\n功率\n电源 ${data.total_source_power} / 电阻 ${data.total_resistor_power} / 差 ${data.balance}`
-        + (state.wireWarnings.length ? `\n\n提示\n${state.wireWarnings.join("\n")}` : "");
+      applySolution(data);
     } catch (err) {
       out.className = "sch-result err";
       out.textContent = `求解服务连接失败：${err}`;
@@ -1004,7 +1127,7 @@
     } else if (state.selected?.kind === "wire") {
       const w = state.wires.find((x) => x.id === state.selected.id);
       if (!w) return;
-      const n = parseFloat(e.target.value);
+      const n = parseEng(e.target.value);
       w.manualCurrent = Number.isFinite(n) ? n : null;
       render();
     }
@@ -1034,6 +1157,32 @@
     const q = `电阻 ${c.label}：${known.join("，") || "已知部分参数"}。请用欧姆定律解释它的电压、电流、电阻关系，并说明计算过程。`;
     editor.classList.remove("show");
     if (typeof window.askAI === "function") window.askAI(q, known.join("；"));
+  });
+
+  varBtn?.addEventListener("click", () => {
+    if (state.selected?.kind === "comp") {
+      const c = state.comps.find((x) => x.id === state.selected.id);
+      if (!c || !["R", "V"].includes(c.type)) return;
+      if (c.unknown) {
+        c.unknown = false;
+        if (c._knownValue) c.value = c._knownValue;
+      } else {
+        c._knownValue = c.value;
+        c.unknown = true;
+        c.value = "";
+        c.voltage = null;
+        c.current = null;
+      }
+      invalidate();
+      render();
+      return;
+    }
+    if (state.selected?.kind === "wire") {
+      const w = state.wires.find((x) => x.id === state.selected.id);
+      if (!w) return;
+      w.known = !w.known;
+      render();
+    }
   });
 
   flipBtn?.addEventListener("click", () => {
