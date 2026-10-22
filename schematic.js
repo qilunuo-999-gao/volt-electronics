@@ -92,6 +92,10 @@
   const flipBtn = $("#schFlip");
   const measured = $("#schMeasured");
   const fieldLabel = $("#schFieldLabel");
+  const branchCalc = $("#schBranchCalc");
+  const voltageInput = $("#schVoltage");
+  const resistanceInput = $("#schResistance");
+  const calcResult = $("#schCalcResult");
 
   function uid(prefix) {
     state.ids[prefix] = (state.ids[prefix] || 0) + 1;
@@ -259,6 +263,63 @@
     }
     return null;
   }
+
+  function attachedResistor(w) {
+    for (const a of [w.a, w.b]) {
+      if (a.k !== "pin") continue;
+      const c = state.comps.find((x) => x.id === a.cid);
+      if (c?.type === "R") {
+        const r = parseEng(c.value);
+        if (Number.isFinite(r)) return r;
+      }
+    }
+    return null;
+  }
+
+  function wireBranchCurrent(w) {
+    const cur = Number(wireCurrent(w));
+    return Number.isFinite(cur) ? cur : null;
+  }
+
+  function calcBranch(kind) {
+    const w = state.wires.find((x) => x.id === state.selected?.id);
+    if (!w) return;
+    const cur = wireBranchCurrent(w);
+    if (cur === null || Math.abs(cur) < 1e-15) {
+      calcResult.className = "sch-calc-result err";
+      calcResult.textContent = "没有可用电流。请在“电流标注”里填写 I，或先求解。";
+      return;
+    }
+    if (kind === "R") {
+      const u = parseEng(voltageInput.value);
+      if (!Number.isFinite(u) || u === 0) {
+        calcResult.className = "sch-calc-result err";
+        calcResult.textContent = "请先填写导线电压 U，且不能为 0。";
+        return;
+      }
+      const r = Math.abs(u / cur);
+      w.resistance = r;
+      resistanceInput.value = fmtUnit(r, "Ω");
+      calcResult.className = "sch-calc-result";
+      calcResult.textContent = `R = U / I = ${fmtUnit(Math.abs(u), "V")} / ${fmtA(Math.abs(cur))} = ${fmtUnit(r, "Ω")}`;
+      return;
+    }
+    let r = parseEng(resistanceInput.value);
+    if (!Number.isFinite(r) || r <= 0) {
+      const auto = attachedResistor(w);
+      if (auto !== null) r = auto;
+    }
+    if (!Number.isFinite(r) || r <= 0) {
+      calcResult.className = "sch-calc-result err";
+      calcResult.textContent = "请先填写电阻 R，或让这条导线直接连一个电阻。";
+      return;
+    }
+    const u = Math.abs(cur) * r;
+    w.voltage = u;
+    voltageInput.value = fmtUnit(u, "V");
+    calcResult.className = "sch-calc-result";
+    calcResult.textContent = `U = I × R = ${fmtA(Math.abs(cur))} × ${fmtUnit(r, "Ω")} = ${fmtUnit(u, "V")}`;
+  }
   function wireCurrent(w) {
     if (w.manualCurrent !== undefined && w.manualCurrent !== null) return w.manualCurrent;
     return w.computedCurrent ?? null;
@@ -350,6 +411,7 @@
     val.placeholder = "例如 10k / 5V / 100nF";
     flipBtn.style.display = "none";
     measured.innerHTML = "";
+    branchCalc.classList.remove("show");
     if (!sel) {
       selText.textContent = "未选择";
       val.value = "";
@@ -413,6 +475,13 @@
         }
       }
       measured.innerHTML = m;
+      branchCalc.classList.add("show");
+      voltageInput.value = w.voltage ?? "";
+      resistanceInput.value = w.resistance ?? "";
+      calcResult.className = "sch-calc-result";
+      calcResult.textContent = cur === null || cur === undefined
+        ? "先填写导线电流 I，或点求解得到电流；再填 U 或 R。"
+        : `可用电流 I = ${fmtA(Number(cur))}。填 U 或 R 后点计算。`;
     } else {
       selText.textContent = "节点 / 连接点";
       val.value = "";
@@ -929,6 +998,19 @@
       render();
     }
   });
+
+  voltageInput?.addEventListener("input", (e) => {
+    if (state.selected?.kind !== "wire") return;
+    const w = state.wires.find((x) => x.id === state.selected.id);
+    if (w) w.voltage = e.target.value;
+  });
+  resistanceInput?.addEventListener("input", (e) => {
+    if (state.selected?.kind !== "wire") return;
+    const w = state.wires.find((x) => x.id === state.selected.id);
+    if (w) w.resistance = e.target.value;
+  });
+  $("#schCalcR")?.addEventListener("click", () => calcBranch("R"));
+  $("#schCalcV")?.addEventListener("click", () => calcBranch("V"));
 
   flipBtn?.addEventListener("click", () => {
     if (state.selected?.kind === "comp") {
