@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VOLT — 电子技术计算智能体</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="light.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M4 22 L10 10 L16 22 L22 10 L28 22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+            <circle cx="10" cy="10" r="2" fill="currentColor"/>
+            <circle cx="22" cy="10" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <h1>VOLT</h1>
+          <p>电子技术计算智能体</p>
+        </div>
+      </div>
+
+      <div class="status"><span class="live"></span> 确定性计算 · 本地运行</div>
+
+      <div class="nav-label">计算库</div>
+      <nav id="groups" class="groups" aria-label="计算分类"></nav>
+
+      <div class="sidebar-foot">
+        <div class="foot-rule"></div>
+        <p>公式优先，不猜数字。</p>
+        <p class="dim">支持 10k / 4.7uF / 20mA / 10°C 写法</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb">WORKBENCH <span>/</span> ELECTRONICS</div>
+        <div class="top-actions">
+          <button id="schematicBtn" class="ghost tool-btn" type="button" title="打开可视化电路画布">
+            <span class="tool-ico">▦</span><span class="tool-label">电路画布</span>
+          </button>
+          <button id="circuitBtn" class="ghost tool-btn" type="button" title="输入网表求解直流电路">
+            <span class="tool-ico">⌁</span><span class="tool-label">电路求解</span>
+          </button>
+          <button id="ocrBtn" class="ghost tool-btn" type="button" title="上传或拍摄题目图片">
+            <span class="tool-ico">▧</span><span class="tool-label">识别题目</span>
+          </button>
+          <button id="screenBtn" class="ghost tool-btn" type="button" title="截取屏幕并识别">
+            <span class="tool-ico">⌗</span><span class="tool-label">识屏</span>
+          </button>
+          <button id="clearBtn" class="ghost" type="button">清空</button>
+          <div class="tag">v1.2</div>
+        </div>
+      </header>
+
+      <section id="chat" class="chat" aria-live="polite">
+        <div id="welcome" class="welcome">
+          <div class="eyebrow"><span></span> ELECTRONICS CALCULATION AGENT</div>
+          <h2>把电路问题<br><em>算清楚。</em></h2>
+          <p class="lede">输入参数和你想求的量。VOLT 会选择公式、代入数值，并给出步骤和工程提醒。</p>
+          <div class="welcome-grid" id="welcomeCards"></div>
+          <div class="welcome-note">
+            <span class="pulse"></span>
+            所有结果由本地公式引擎计算 · 可直接 Ctrl+V 粘贴题目截图
+          </div>
+        </div>
+      </section>
+
+      <div class="composer-wrap">
+        <div class="suggestions" id="suggestions"></div>
+        <form id="form" class="composer" autocomplete="off">
+          <div class="prefix">&gt;_</div>
+          <textarea id="input" rows="1" placeholder="例如：5V 100Ω 的电流是多少？" aria-label="输入计算问题"></textarea>
+          <button type="submit" id="send" aria-label="发送">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </form>
+        <div class="hint">Enter 发送 · Shift+Enter 换行 · 结果按理想元件计算，工程选型请留余量</div>
+      </div>
+    </main>
+
+    <aside class="inspector">
+      <div class="inspector-head">
+        <span>本次计算</span>
+        <span id="inspectorStatus" class="inspector-status">待输入</span>
+      </div>
+      <div id="inspector" class="inspector-body">
+        <div class="empty">
+          <div class="scope">⌁</div>
+          <p>计算结果会在这里展开<br>公式、数值和注意事项。</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="schematicEditor" class="schematic-editor">
+    <header class="sch-top">
+      <div class="sch-brand">
+        <span class="sch-mark">▦</span>
+        <div>
+          <div class="kicker">SCHEMATIC / DC WORKBENCH</div>
+          <h3>电路画布</h3>
+        </div>
+      </div>
+      <div class="sch-top-actions">
+        <button id="schExampleDivider" class="ghost" type="button">示例：分压</button>
+        <button id="schExampleSuper" class="ghost" type="button">示例：叠加</button>
+        <button id="schClear" class="ghost" type="button">清空</button>
+        <button id="schSolve" class="primary-btn" type="button">求解</button>
+        <button id="schClose" class="modal-close" type="button" aria-label="关闭">×</button>
+      </div>
+    </header>
+    <div class="sch-body">
+      <aside class="sch-palette">
+        <div class="sch-palette-head">元件库</div>
+        <div id="schPalette"></div>
+        <div class="sch-palette-foot">点击元件，再点画布放置。</div>
+      </aside>
+      <main class="sch-canvas-wrap">
+        <svg id="schSvg" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="schGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e4eee8" stroke-width="1"/>
+            </pattern>
+            <pattern id="schGridMajor" width="100" height="100" patternUnits="userSpaceOnUse">
+              <rect width="100" height="100" fill="url(#schGrid)"/>
+              <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#d3e3db" stroke-width="1"/>
+            </pattern>
+          </defs>
+          <rect id="schGridRect" x="-4000" y="-4000" width="8000" height="8000" fill="url(#schGridMajor)"/>
+          <g id="schWorld"></g>
+          <g id="schOverlay"></g>
+        </svg>
+        <div class="sch-tools">
+          <button class="sch-tool active" data-sch-tool="select" type="button">选择</button>
+          <button class="sch-tool" data-sch-tool="wire" type="button">导线</button>
+          <button class="sch-tool" data-sch-tool="node" type="button">节点</button>
+          <button class="sch-tool" id="schCurrentToggle" type="button">电流数值</button>
+        </div>
+        <div class="sch-canvas-hint">拖动元件移动 · 滚轮缩放 · 中键拖动画布 · Delete 删除 · R 旋转 · 选中导线可标注电流</div>
+      </main>
+      <aside class="sch-inspector">
+        <div class="sch-panel-label">选中对象</div>
+        <div id="schSelection" class="sch-selection">未选择</div>
+        <label class="sch-field">
+          <span id="schFieldLabel">数值</span>
+          <input id="schValue" type="text" placeholder="例如 10k / 5V / 100nF">
+        </label>
+        <div class="sch-inspector-actions">
+          <button id="schFlip" class="followup" type="button">正负极反转</button>
+          <button id="schRotate" class="followup" type="button">旋转</button>
+          <button id="schDelete" class="followup" type="button">删除</button>
+        </div>
+        <div id="schMeasured" class="sch-measured"></div>
+        <div class="sch-panel-label">网表预览</div>
+        <pre id="schNetlist" class="sch-netlist">放置元件并连线后显示网表。</pre>
+        <div class="sch-panel-label">求解结果</div>
+        <div id="schResult" class="sch-result">尚未求解。</div>
+      </aside>
+    </div>
+  </div>
+
+  <div id="circuitModal" class="modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <div class="kicker">CIRCUIT / MNA</div>
+          <h3>电路求解</h3>
+        </div>
+        <button id="circuitClose" class="modal-close" type="button" aria-label="关闭">×</button>
+      </div>
+      <p class="modal-desc">一行一个元件：<code>R1 A B 2</code>、<code>V1 A 0 17</code>、<code>I1 A 0 1m</code>。节点 <code>0</code> 是地，支持 <code>10k / 4.7u / 2.2M</code>。</p>
+      <textarea id="netlist" class="netlist" spellcheck="false"></textarea>
+      <div class="modal-actions">
+        <button id="circuitSolve" class="primary-btn" type="button">求解</button>
+        <button id="circuitExample" class="followup" type="button">载入叠加定理示例</button>
+      </div>
+      <div id="circuitError" class="modal-error"></div>
+      <pre class="modal-help">R1 A B 2
+V1 A 0 17
+I1 0 A 1m
+
+节点 0 / gnd = 参考地
+V 的 + 端是第一个节点
+I 的电流从第一个节点流向第二个节点</pre>
+    </div>
+  </div>
+
+  <input id="imageInput" type="file" accept="image/*" hidden>
+  <div id="dropOverlay" class="drop-overlay">
+    <div class="drop-inner">
+      <div class="drop-icon">▧</div>
+      <strong>松开以识别题目</strong>
+      <span>支持截图、拍照和电路题图片</span>
+    </div>
+  </div>
+
+  <script>window.VOLT_STATIC=true;</script>
+  <script src="static.js"></script>
+  <script src="schematic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
