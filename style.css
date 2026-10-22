@@ -899,6 +899,20 @@ body::before {
 }
 .sch-measured:empty { display: none; }
 .sch-measured b { color: var(--mint); font-weight: 400; }
+.sch-branch-calc { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.sch-branch-calc.show { display: block; }
+.sch-branch-calc .sch-field { margin-top: 8px; }
+.sch-calc-result {
+  margin-top: 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(125,255,208,.025);
+  color: var(--mint);
+  font: 10px/1.7 var(--mono);
+  white-space: pre-wrap;
+}
+.sch-calc-result.err { color: var(--red); }
 .sch-wire-value {
   fill: #a9f5d8;
   font: 9px var(--mono);
