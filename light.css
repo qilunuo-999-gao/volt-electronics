@@ -255,6 +255,8 @@ body::before {
 .sch-measured b { color: var(--mint-soft); }
 .sch-calc-result { background: #f7fbf9; border-color: var(--line); color: #0c6a4f; font-size: 12px; }
 .sch-calc-result.err { color: #a31d2b; }
+.sch-res-measure rect { fill: #ffffff; stroke: var(--line-2); }
+.sch-res-measure text { fill: #0c6a4f; font-size: 10px; }
 .sch-symbol { stroke: #243b32; }
 .sch-comp text { fill: #63786e; font-size: 11px; }
 .sch-comp .pin { fill: #ffffff; stroke: var(--mint); }
