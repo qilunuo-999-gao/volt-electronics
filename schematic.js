@@ -207,8 +207,11 @@
           ${lines.map((line, idx) => `<text x="8" y="${15 + idx * 15}">${esc(line)}</text>`).join("")}
         </g>`;
       }
-    } else if (c.type === "V" && c.unknown) {
-      valueText = "U = ?";
+    } else if (c.type === "V") {
+      const vv = parseEng(c.value);
+      valueText = c.unknown
+        ? "U = ?"
+        : (Number.isFinite(vv) ? `U = ${fmtUnit(vv, "V")}` : (c.value ? `U = ${c.value}` : "U = ?"));
     }
     let signs = "";
     if (c.type === "V") {
