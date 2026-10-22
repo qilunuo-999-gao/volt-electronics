@@ -949,6 +949,7 @@ body::before {
 .sch-comp .hit { fill: transparent; cursor: move; }
 .sch-wire { fill: none; stroke: #8cbfae; stroke-width: 2; stroke-linecap: round; }
 .sch-wire.selected { stroke: var(--mint); stroke-width: 2.5; }
+.sch-wire.known { stroke: var(--amber); }
 .sch-wire-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
 .sch-junction { fill: var(--mint); stroke: #06100c; stroke-width: 1; }
 .sch-junction.selected { stroke: var(--amber); stroke-width: 2; }
