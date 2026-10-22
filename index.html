@@ -157,6 +157,22 @@
           <button id="schDelete" class="followup" type="button">删除</button>
         </div>
         <div id="schMeasured" class="sch-measured"></div>
+        <div id="schBranchCalc" class="sch-branch-calc">
+          <div class="sch-panel-label">导线支路计算</div>
+          <label class="sch-field">
+            <span>导线电压 U (V)</span>
+            <input id="schVoltage" type="text" placeholder="例如 5 或 3.3">
+          </label>
+          <label class="sch-field">
+            <span>电阻 R (Ω)</span>
+            <input id="schResistance" type="text" placeholder="例如 100 或 4.7k">
+          </label>
+          <div class="sch-inspector-actions">
+            <button id="schCalcR" class="followup" type="button">求电阻 R</button>
+            <button id="schCalcV" class="followup" type="button">求电压 U</button>
+          </div>
+          <div id="schCalcResult" class="sch-calc-result">填写 I 和 U（或 I 和 R）后计算。</div>
+        </div>
         <div class="sch-panel-label">网表预览</div>
         <pre id="schNetlist" class="sch-netlist">放置元件并连线后显示网表。</pre>
         <div class="sch-panel-label">求解结果</div>
